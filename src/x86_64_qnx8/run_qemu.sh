@@ -43,7 +43,7 @@ qemu-system-x86_64 \
                 ${NETWORK} \
                 -device virtio-rng-pci,rng=rng0 \
                 -fsdev local,id=fsdev0,path="${FSDEV_PATH}",security_model=none \
-                -device virtio-9p-pci,fsdev=fsdev0,mount_tag=hostshare,addr=0x07
+                -device virtio-9p-pci,fsdev=fsdev0,mount_tag=hostshare,addr=0x07 \
                 2>&1 | sed -u 's/[^[:print:]]//g' | sed -u 's/\r//'
 
 qemu_extract_results "${FSDEV_PATH}"
