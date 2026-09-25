@@ -160,6 +160,16 @@ esac
 QEMU_CPU="${QEMU_CPU:-${DEFAULT_QEMU_CPU}}"
 DISABLE_KVM="${DISABLE_KVM:-0}"
 
+EXPECTED_QEMU_VERSION="8.2.2"
+command -v qemu-system-x86_64 >/dev/null 2>&1 || {
+    echo "ERROR: qemu-system-x86_64 not found. Install: sudo apt-get install -y qemu-system" >&2
+    exit 1
+}
+QEMU_VERSION="$(qemu-system-x86_64 --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
+if [ -n "${QEMU_VERSION}" ] && [ "${QEMU_VERSION}" != "${EXPECTED_QEMU_VERSION}" ]; then
+    echo "WARNING: qemu-system-x86_64 ${QEMU_VERSION} detected, CI uses ${EXPECTED_QEMU_VERSION}" >&2
+fi
+
 if [[ -e /dev/kvm && -r /dev/kvm ]] && [[ "${DISABLE_KVM}" == 0 ]]; then
     echo "KVM supported!"
     ACCEL="-enable-kvm -cpu ${QEMU_CPU}"

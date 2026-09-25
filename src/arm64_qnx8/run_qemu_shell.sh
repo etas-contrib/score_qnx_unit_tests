@@ -53,6 +53,16 @@ fi
 
 ACCEL="-machine virt -cpu max"
 
+EXPECTED_QEMU_VERSION="8.2.2"
+command -v qemu-system-aarch64 >/dev/null 2>&1 || {
+    echo "ERROR: qemu-system-aarch64 not found. Install: sudo apt-get install -y qemu-system" >&2
+    exit 1
+}
+QEMU_VERSION="$(qemu-system-aarch64 --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
+if [ -n "${QEMU_VERSION}" ] && [ "${QEMU_VERSION}" != "${EXPECTED_QEMU_VERSION}" ]; then
+    echo "WARNING: qemu-system-aarch64 ${QEMU_VERSION} detected, CI uses ${EXPECTED_QEMU_VERSION}" >&2
+fi
+
 qemu-system-aarch64 \
                 -smp 2 \
                 -m 2G \
