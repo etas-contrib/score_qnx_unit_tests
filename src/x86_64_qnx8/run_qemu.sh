@@ -76,6 +76,10 @@ if [ -f "${FSDEV_PATH}/test_results/test.xml" ]; then
     cp ${FSDEV_PATH}/test_results/test.xml ${XML_OUTPUT_FILE}
 fi
 
+if [ -f "${FSDEV_PATH}/test_results/test_output.log" ]; then
+    cat "${FSDEV_PATH}/test_results/test_output.log"
+fi
+
 if [ -f "${FSDEV_PATH}/test_results/coverage.tar.gz" ]; then
     tar -xf ${FSDEV_PATH}/test_results/coverage.tar.gz --no-same-owner --no-same-permissions -C "${TEST_UNDECLARED_OUTPUTS_DIR}"
     if [ -n "${COVERAGE_DIR:-}" ]; then

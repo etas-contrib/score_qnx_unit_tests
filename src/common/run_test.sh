@@ -24,13 +24,27 @@ if [ -f /opt/tests/cc_test_qnx_extra_args.sh ]; then
     echo "Test args: $*"
 fi
 
-/persistent/unit_tests/cc_test_qnx "$@"
+# Test output written straight to the console goes through the emulated
+# serial UART (one slow trap per character). Redirecting to the RAM disk
+# (/persistent) is an order of magnitude faster for chatty tests. The host
+# cats the captured log back to stdout after the run so --test_output still
+# shows it. Set QEMU_STREAM_OUTPUT=1 to stream live instead (for interactive
+# debugging at the cost of speed).
+if [ "${QEMU_STREAM_OUTPUT:-0}" = "1" ]; then
+    /persistent/unit_tests/cc_test_qnx "$@"
+else
+    /persistent/unit_tests/cc_test_qnx "$@" > /persistent/test_output.log 2>&1
+fi
 
 echo "$?" > /persistent/returncode.log
 
 mkdir /opt/tests/test_results
 
 cp -fR /persistent/returncode.log /opt/tests/test_results/returncode.log
+
+if [ -e "/persistent/test_output.log" ]; then
+    cp -fR /persistent/test_output.log /opt/tests/test_results/test_output.log
+fi
 
 if [ -e "/persistent/test.xml" ]; then
     cp -fR /persistent/test.xml /opt/tests/test_results/test.xml
