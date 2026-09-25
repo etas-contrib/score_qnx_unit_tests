@@ -45,16 +45,18 @@ qemu_setup_accel() {
             qemu_check qemu-system-x86_64
             DISABLE_KVM="${DISABLE_KVM:-0}"
             if [[ -e /dev/kvm && -r /dev/kvm ]] && [[ "${DISABLE_KVM}" == 0 ]]; then
-                echo "KVM supported!"
+                echo "KVM supported! CPU model: ${QEMU_CPU}"
                 ACCEL="-enable-kvm -cpu ${QEMU_CPU}"
             else
                 [[ "${DISABLE_KVM}" != 0 ]] && echo "KVM explicitly disabled!"
+                echo "CPU model: ${QEMU_CPU}"
                 ACCEL="-cpu ${QEMU_CPU}"
             fi
             ;;
         aarch64)
             QEMU_CPU="${QEMU_CPU:-max}"
             qemu_check qemu-system-aarch64
+            echo "CPU model: ${QEMU_CPU}"
             ACCEL="-machine virt -cpu ${QEMU_CPU}"
             ;;
     esac
