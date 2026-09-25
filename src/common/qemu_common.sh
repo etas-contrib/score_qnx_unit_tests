@@ -81,21 +81,25 @@ qemu_cleanup_fsdev() {
 qemu_extract_results() {
     local fsdev_path="$1"
     if [ -f "${fsdev_path}/test_results/test.xml" ]; then
-        cp ${fsdev_path}/test_results/test.xml ${XML_OUTPUT_FILE}
+        cp "${fsdev_path}/test_results/test.xml" "${XML_OUTPUT_FILE}"
     fi
     if [ -f "${fsdev_path}/test_results/test_output.log" ]; then
         cat "${fsdev_path}/test_results/test_output.log"
     fi
     if [ -f "${fsdev_path}/test_results/coverage.tar.gz" ]; then
-        tar -xf ${fsdev_path}/test_results/coverage.tar.gz --no-same-owner --no-same-permissions -C "${TEST_UNDECLARED_OUTPUTS_DIR}"
+        tar -xf "${fsdev_path}/test_results/coverage.tar.gz" --no-same-owner --no-same-permissions -C "${TEST_UNDECLARED_OUTPUTS_DIR}"
         if [ -n "${COVERAGE_DIR:-}" ]; then
-            tar -xf ${fsdev_path}/test_results/coverage.tar.gz --no-same-owner --no-same-permissions -C "${COVERAGE_DIR}"
+            tar -xf "${fsdev_path}/test_results/coverage.tar.gz" --no-same-owner --no-same-permissions -C "${COVERAGE_DIR}"
         fi
     fi
+    local rc
     if [ -f "${fsdev_path}/test_results/returncode.log" ]; then
-        exit $(cat "${fsdev_path}/test_results/returncode.log")
+        rc="$(cat "${fsdev_path}/test_results/returncode.log")"
     else
         echo "ERROR: Test return code log not found!" >&2
-        exit 1
+        rc=1
     fi
+    # An empty or non-numeric returncode would otherwise make `exit` return 0,
+    # silently masking test failures. Default to 1 so a corrupt log fails.
+    exit "${rc:-1}"
 }
