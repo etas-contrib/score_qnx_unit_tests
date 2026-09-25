@@ -218,7 +218,7 @@ cc_test_qnx(
 | Variable | Default | Description |
 |---|---|---|
 | `DISABLE_KVM` | `0` | Set to `1` to disable KVM acceleration |
-| `QEMU_CPU` | `host` | QEMU CPU model (e.g. `Cascadelake-Server-v5`) |
+| `QEMU_CPU` | vendor-detected (`Icelake-Server` on Intel hosts, `EPYC-Milan` on AMD, `host` otherwise) | QEMU CPU model (e.g. `Cascadelake-Server-v5`) |
 | `FSDEV_PATH` | (auto) | Override the virtio-9p shared directory path |
 
 For tests, pass via `--test_env`:

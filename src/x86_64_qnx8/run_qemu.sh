@@ -35,7 +35,15 @@ fi
 # Share test image via the 9p host directory (mounted as /opt/tests in the VM)
 tar xf "${TEST_IMAGE}" -C "${FSDEV_PATH}"
 
-QEMU_CPU="${QEMU_CPU:-host}"
+# Default CPU model must match the host vendor: KVM lets a guest run under a
+# different vendor's model (e.g. Icelake-Server on AMD), but the resulting
+# CPUID/MSR mismatch can destabilize early SMP/APIC bring-up.
+case "$(grep -m1 '^vendor_id' /proc/cpuinfo 2>/dev/null)" in
+    *AuthenticAMD*) DEFAULT_QEMU_CPU="EPYC-Milan" ;;
+    *GenuineIntel*) DEFAULT_QEMU_CPU="Icelake-Server" ;;
+    *) DEFAULT_QEMU_CPU="host" ;;
+esac
+QEMU_CPU="${QEMU_CPU:-${DEFAULT_QEMU_CPU}}"
 DISABLE_KVM="${DISABLE_KVM:-0}"
 
 if [[ -e /dev/kvm && -r /dev/kvm ]] && [[ "${DISABLE_KVM}" == 0 ]]; then

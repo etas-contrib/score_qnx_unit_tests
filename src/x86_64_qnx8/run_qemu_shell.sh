@@ -53,7 +53,15 @@ if [ ! -z "${DEBUG_PORT}" ]; then
     NETWORK="-netdev user,id=net0,hostfwd=tcp:127.0.0.1:${DEBUG_PORT}-10.0.2.15:38080 -device virtio-net-pci,netdev=net0"
 fi
 
-QEMU_CPU="${QEMU_CPU:-host}"
+# Default CPU model must match the host vendor: KVM lets a guest run under a
+# different vendor's model (e.g. Icelake-Server on AMD), but the resulting
+# CPUID/MSR mismatch can destabilize early SMP/APIC bring-up.
+case "$(grep -m1 '^vendor_id' /proc/cpuinfo 2>/dev/null)" in
+    *AuthenticAMD*) DEFAULT_QEMU_CPU="EPYC-Milan" ;;
+    *GenuineIntel*) DEFAULT_QEMU_CPU="Icelake-Server" ;;
+    *) DEFAULT_QEMU_CPU="host" ;;
+esac
+QEMU_CPU="${QEMU_CPU:-${DEFAULT_QEMU_CPU}}"
 DISABLE_KVM="${DISABLE_KVM:-0}"
 
 if [[ -e /dev/kvm && -r /dev/kvm ]] && [[ "${DISABLE_KVM}" == 0 ]]; then
