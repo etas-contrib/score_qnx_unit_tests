@@ -29,6 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Locate data dependencies from the sh_binary's runfiles
 IFS_IMAGE="${SCRIPT_DIR}/init.ifs"
+. "${SCRIPT_DIR}/../common/qemu_common.sh"
 
 # The test binary and optional args are passed by --run_under
 TEST_BINARY="$1"
@@ -40,22 +41,9 @@ if [[ ! -f "${TEST_BINARY}" ]]; then
     exit 1
 fi
 
-# --- Prepare writable copies of shared images ---
-cleanup() {
-    if [[ "${FSDEV_PATH_CREATED:-0}" == "1" ]]; then
-        rm -rf "${FSDEV_PATH}"
-    fi
-}
-trap cleanup EXIT
-
 # --- Prepare host shared directory for virtio-9p ---
-if [[ -z "${FSDEV_PATH:-}" ]]; then
-    FSDEV_PATH=$(mktemp -d)
-    FSDEV_PATH_CREATED=1
-fi
-
-# Share test binary + runfiles via the 9p host directory
-mkdir -p "${FSDEV_PATH}"
+trap qemu_cleanup_fsdev EXIT
+qemu_setup_fsdev
 
 # Copy test binary
 cp "${TEST_BINARY}" "${FSDEV_PATH}/cc_test_qnx"
@@ -149,34 +137,7 @@ else
 fi
 
 # --- Launch QEMU (x86_64, QNX 8) ---
-# Default CPU model must match the host vendor: KVM lets a guest run under a
-# different vendor's model (e.g. Icelake-Server on AMD), but the resulting
-# CPUID/MSR mismatch can destabilize early SMP/APIC bring-up.
-case "$(grep -m1 '^vendor_id' /proc/cpuinfo 2>/dev/null)" in
-    *AuthenticAMD*) DEFAULT_QEMU_CPU="EPYC-Milan" ;;
-    *GenuineIntel*) DEFAULT_QEMU_CPU="Icelake-Server" ;;
-    *) DEFAULT_QEMU_CPU="host" ;;
-esac
-QEMU_CPU="${QEMU_CPU:-${DEFAULT_QEMU_CPU}}"
-DISABLE_KVM="${DISABLE_KVM:-0}"
-
-EXPECTED_QEMU_VERSION="8.2.2"
-command -v qemu-system-x86_64 >/dev/null 2>&1 || {
-    echo "ERROR: qemu-system-x86_64 not found. Install: sudo apt-get install -y qemu-system" >&2
-    exit 1
-}
-QEMU_VERSION="$(qemu-system-x86_64 --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
-if [ -n "${QEMU_VERSION}" ] && [ "${QEMU_VERSION}" != "${EXPECTED_QEMU_VERSION}" ]; then
-    echo "WARNING: qemu-system-x86_64 ${QEMU_VERSION} detected, CI uses ${EXPECTED_QEMU_VERSION}" >&2
-fi
-
-if [[ -e /dev/kvm && -r /dev/kvm ]] && [[ "${DISABLE_KVM}" == 0 ]]; then
-    echo "KVM supported!"
-    ACCEL="-enable-kvm -cpu ${QEMU_CPU}"
-else
-    [[ "${DISABLE_KVM}" != 0 ]] && echo "KVM explicitly disabled!"
-    ACCEL="-cpu ${QEMU_CPU}"
-fi
+qemu_setup_accel
 
 NETWORK="-netdev user,id=net0 -device virtio-net-pci,netdev=net0"
 
@@ -196,25 +157,4 @@ qemu-system-x86_64 \
                 2>&1 | sed -u 's/[^[:print:]]//g' | sed -u 's/\r//'
 
 # --- Extract test results ---
-if [ -f "${FSDEV_PATH}/test_results/test.xml" ]; then
-    cp ${FSDEV_PATH}/test_results/test.xml ${XML_OUTPUT_FILE}
-fi
-
-if [ -f "${FSDEV_PATH}/test_results/test_output.log" ]; then
-    cat "${FSDEV_PATH}/test_results/test_output.log"
-fi
-
-if [ -f "${FSDEV_PATH}/test_results/coverage.tar.gz" ]; then
-    tar -xf ${FSDEV_PATH}/test_results/coverage.tar.gz --no-same-owner --no-same-permissions -C "${TEST_UNDECLARED_OUTPUTS_DIR}"
-    if [ -n "${COVERAGE_DIR:-}" ]; then
-        # Additionally extract to COVERAGE_DIR for Bazel's collect_cc_coverage.sh
-        tar -xf ${FSDEV_PATH}/test_results/coverage.tar.gz --no-same-owner --no-same-permissions -C "${COVERAGE_DIR}"
-    fi
-fi
-
-if [ -f "${FSDEV_PATH}/test_results/returncode.log" ]; then
-    exit $(cat "${FSDEV_PATH}/test_results/returncode.log")
-else
-    echo "ERROR: Test return code log not found!" >&2
-    exit 1
-fi
+qemu_extract_results "${FSDEV_PATH}"

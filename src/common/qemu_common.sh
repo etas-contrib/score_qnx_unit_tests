@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Shared QEMU launch helpers sourced by x86_64 and aarch64 test scripts.
+
+QEMU_EXPECTED_VERSION="8.2.2"
+
+# Verify the QEMU binary is on PATH; warn on version mismatch (not a hard
+# failure, so older or newer QEMU is not locked out).
+qemu_check() {
+    local binary="$1"
+    command -v "${binary}" >/dev/null 2>&1 || {
+        echo "ERROR: ${binary} not found. Install: sudo apt-get install -y qemu-system" >&2
+        exit 1
+    }
+    local version
+    version="$("${binary}" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
+    if [ -n "${version}" ] && [ "${version}" != "${QEMU_EXPECTED_VERSION}" ]; then
+        echo "WARNING: ${binary} ${version} detected, CI uses ${QEMU_EXPECTED_VERSION}" >&2
+    fi
+}
+
+# Set ACCEL, QEMU_CPU, and DISABLE_KVM based on host architecture.
+# x86_64: vendor-aware CPU model + optional KVM. aarch64: virt machine + max CPU.
+qemu_setup_accel() {
+    case "$(uname -m)" in
+        x86_64)
+            case "$(grep -m1 '^vendor_id' /proc/cpuinfo 2>/dev/null)" in
+                *AuthenticAMD*) QEMU_CPU="${QEMU_CPU:-EPYC-Milan}" ;;
+                *GenuineIntel*) QEMU_CPU="${QEMU_CPU:-Icelake-Server}" ;;
+                *) QEMU_CPU="${QEMU_CPU:-host}" ;;
+            esac
+            qemu_check qemu-system-x86_64
+            DISABLE_KVM="${DISABLE_KVM:-0}"
+            if [[ -e /dev/kvm && -r /dev/kvm ]] && [[ "${DISABLE_KVM}" == 0 ]]; then
+                echo "KVM supported!"
+                ACCEL="-enable-kvm -cpu ${QEMU_CPU}"
+            else
+                [[ "${DISABLE_KVM}" != 0 ]] && echo "KVM explicitly disabled!"
+                ACCEL="-cpu ${QEMU_CPU}"
+            fi
+            ;;
+        aarch64)
+            QEMU_CPU="${QEMU_CPU:-max}"
+            qemu_check qemu-system-aarch64
+            ACCEL="-machine virt -cpu ${QEMU_CPU}"
+            ;;
+    esac
+}
+
+# Create or reuse the virtio-9p shared directory.
+qemu_setup_fsdev() {
+    if [[ -z "${FSDEV_PATH:-}" ]]; then
+        FSDEV_PATH=$(mktemp -d)
+        FSDEV_PATH_CREATED=1
+    fi
+    mkdir -p "${FSDEV_PATH}"
+}
+
+# Remove the virtio-9p shared directory if we created it.
+qemu_cleanup_fsdev() {
+    if [[ "${FSDEV_PATH_CREATED:-0}" == "1" ]]; then
+        rm -rf "${FSDEV_PATH}"
+    fi
+}
+
+# Extract test results from the virtio-9p share and exit with the test's code.
+# Usage: qemu_extract_results <fsdev_path>
+qemu_extract_results() {
+    local fsdev_path="$1"
+    if [ -f "${fsdev_path}/test_results/test.xml" ]; then
+        cp ${fsdev_path}/test_results/test.xml ${XML_OUTPUT_FILE}
+    fi
+    if [ -f "${fsdev_path}/test_results/test_output.log" ]; then
+        cat "${fsdev_path}/test_results/test_output.log"
+    fi
+    if [ -f "${fsdev_path}/test_results/coverage.tar.gz" ]; then
+        tar -xf ${fsdev_path}/test_results/coverage.tar.gz --no-same-owner --no-same-permissions -C "${TEST_UNDECLARED_OUTPUTS_DIR}"
+        if [ -n "${COVERAGE_DIR:-}" ]; then
+            tar -xf ${fsdev_path}/test_results/coverage.tar.gz --no-same-owner --no-same-permissions -C "${COVERAGE_DIR}"
+        fi
+    fi
+    if [ -f "${fsdev_path}/test_results/returncode.log" ]; then
+        exit $(cat "${fsdev_path}/test_results/returncode.log")
+    else
+        echo "ERROR: Test return code log not found!" >&2
+        exit 1
+    fi
+}

@@ -15,6 +15,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/../common/qemu_common.sh"
+
 IFS_IMAGE=$1
 TEST_IMAGE=$2
 
@@ -29,23 +32,11 @@ if [ $# -eq 4 ]; then
     fi
 fi
 
-# --- Prepare writable copies of shared images ---
-cleanup() {
-    if [[ "${FSDEV_PATH_CREATED:-0}" == "1" ]]; then
-        rm -rf "${FSDEV_PATH}"
-    fi
-}
-trap cleanup EXIT
-
-# --- Prepare host shared directory for virtio-9p ---
-if [[ -z "${FSDEV_PATH:-}" ]]; then
-    FSDEV_PATH=$(mktemp -d)
-    FSDEV_PATH_CREATED=1
-fi
+trap qemu_cleanup_fsdev EXIT
+qemu_setup_fsdev
 
 # Share test image via the 9p host directory (mounted as /opt/tests in the VM)
 tar xf "${TEST_IMAGE}" -C "${FSDEV_PATH}"
-
 
 NETWORK="-netdev user,id=net0 -device virtio-net-pci,netdev=net0"
 if [ ! -z "${DEBUG_PORT}" ]; then
@@ -53,34 +44,7 @@ if [ ! -z "${DEBUG_PORT}" ]; then
     NETWORK="-netdev user,id=net0,hostfwd=tcp:127.0.0.1:${DEBUG_PORT}-10.0.2.15:38080 -device virtio-net-pci,netdev=net0"
 fi
 
-# Default CPU model must match the host vendor: KVM lets a guest run under a
-# different vendor's model (e.g. Icelake-Server on AMD), but the resulting
-# CPUID/MSR mismatch can destabilize early SMP/APIC bring-up.
-case "$(grep -m1 '^vendor_id' /proc/cpuinfo 2>/dev/null)" in
-    *AuthenticAMD*) DEFAULT_QEMU_CPU="EPYC-Milan" ;;
-    *GenuineIntel*) DEFAULT_QEMU_CPU="Icelake-Server" ;;
-    *) DEFAULT_QEMU_CPU="host" ;;
-esac
-QEMU_CPU="${QEMU_CPU:-${DEFAULT_QEMU_CPU}}"
-DISABLE_KVM="${DISABLE_KVM:-0}"
-
-EXPECTED_QEMU_VERSION="8.2.2"
-command -v qemu-system-x86_64 >/dev/null 2>&1 || {
-    echo "ERROR: qemu-system-x86_64 not found. Install: sudo apt-get install -y qemu-system" >&2
-    exit 1
-}
-QEMU_VERSION="$(qemu-system-x86_64 --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
-if [ -n "${QEMU_VERSION}" ] && [ "${QEMU_VERSION}" != "${EXPECTED_QEMU_VERSION}" ]; then
-    echo "WARNING: qemu-system-x86_64 ${QEMU_VERSION} detected, CI uses ${EXPECTED_QEMU_VERSION}" >&2
-fi
-
-if [[ -e /dev/kvm && -r /dev/kvm ]] && [[ "${DISABLE_KVM}" == 0 ]]; then
-    echo "KVM supported!"
-    ACCEL="-enable-kvm -cpu ${QEMU_CPU}"
-else
-    [[ "${DISABLE_KVM}" != 0 ]] && echo "KVM explicitly disabled!"
-    ACCEL="-cpu ${QEMU_CPU}"
-fi
+qemu_setup_accel
 
 qemu-system-x86_64 \
                 -smp 2 \

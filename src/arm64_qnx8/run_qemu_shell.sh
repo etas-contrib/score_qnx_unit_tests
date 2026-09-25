@@ -15,6 +15,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/../common/qemu_common.sh"
+
 IFS_IMAGE=$1
 TEST_IMAGE=$2
 
@@ -28,19 +31,8 @@ if [ $# -eq 4 ]; then
     fi
 fi
 
-# --- Prepare writable copies of shared images ---
-cleanup() {
-    if [[ "${FSDEV_PATH_CREATED:-0}" == "1" ]]; then
-        rm -rf "${FSDEV_PATH}"
-    fi
-}
-trap cleanup EXIT
-
-# --- Prepare host shared directory for virtio-9p ---
-if [[ -z "${FSDEV_PATH:-}" ]]; then
-    FSDEV_PATH=$(mktemp -d)
-    FSDEV_PATH_CREATED=1
-fi
+trap qemu_cleanup_fsdev EXIT
+qemu_setup_fsdev
 
 # Share test image via the 9p host directory (mounted as /opt/tests in the VM)
 tar xf "${TEST_IMAGE}" -C "${FSDEV_PATH}"
@@ -51,17 +43,7 @@ if [ ! -z "${DEBUG_PORT}" ]; then
     NETWORK="-netdev user,id=net0,hostfwd=tcp:127.0.0.1:${DEBUG_PORT}-10.0.2.15:38080 -device virtio-net-device,netdev=net0,mac=52:54:00:0d:81:90"
 fi
 
-ACCEL="-machine virt -cpu max"
-
-EXPECTED_QEMU_VERSION="8.2.2"
-command -v qemu-system-aarch64 >/dev/null 2>&1 || {
-    echo "ERROR: qemu-system-aarch64 not found. Install: sudo apt-get install -y qemu-system" >&2
-    exit 1
-}
-QEMU_VERSION="$(qemu-system-aarch64 --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" || true
-if [ -n "${QEMU_VERSION}" ] && [ "${QEMU_VERSION}" != "${EXPECTED_QEMU_VERSION}" ]; then
-    echo "WARNING: qemu-system-aarch64 ${QEMU_VERSION} detected, CI uses ${EXPECTED_QEMU_VERSION}" >&2
-fi
+qemu_setup_accel
 
 qemu-system-aarch64 \
                 -smp 2 \
