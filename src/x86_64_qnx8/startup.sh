@@ -29,7 +29,10 @@ fsevmgr
 waitfor /dev/fsnotify
 
 devb-ram ram capacity=1 blk ramdisk=512m,cache=512k,vnode=256
-waitfor /dev/ram0
+# Explicit 30s timeout: the default 5s is too short for devb-ram to register
+# the device under slow TCG, producing a transient "Unable to access" message.
+# The mkqnx6fs/mount loops below retry anyway, but waiting here avoids the noise.
+waitfor /dev/ram0 30
 
 while ! mkqnx6fs -q /dev/ram0; do
     echo "Failed to create QNX6 filesystem on /dev/ram0. Retrying..."
@@ -45,7 +48,7 @@ while ! mount_virtio9p -o transport=pci none /opt/tests; do
 done
 
 devb-ram ram capacity=1 blk ramdisk=10m,cache=512k,vnode=256
-waitfor /dev/ram1
+waitfor /dev/ram1 30
 
 mkqnx6fs -q /dev/ram1
 
