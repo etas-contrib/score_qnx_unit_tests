@@ -29,7 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Locate data dependencies from the sh_binary's runfiles
 IFS_IMAGE="${SCRIPT_DIR}/init.ifs"
-. "${SCRIPT_DIR}/../common/qemu_common.sh"
+. "${SCRIPT_DIR}/common/qemu_common.sh"
 
 # The test binary and optional args are passed by --run_under
 TEST_BINARY="$1"

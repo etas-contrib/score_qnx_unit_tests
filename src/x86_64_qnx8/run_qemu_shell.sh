@@ -15,7 +15,10 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The sh_binary entrypoint is a symlink in the consuming package, so $0 points
+# there, not at this script. Resolve it so SCRIPT_DIR reaches src/<arch>/ and
+# ../common/qemu_common.sh finds the shared helpers.
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 . "${SCRIPT_DIR}/../common/qemu_common.sh"
 
 IFS_IMAGE=$1
